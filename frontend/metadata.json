@@ -1,0 +1,8 @@
+{
+  "name": "LegalGuard AI",
+  "description": "Análisis inteligente de contingencias legales, técnicas y procedimentales para proyectos de construcción y energía.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

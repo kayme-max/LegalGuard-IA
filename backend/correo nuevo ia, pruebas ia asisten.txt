@@ -1,0 +1,23 @@
+correo nuevo ia, pruebas ia: asistenteiaasistenteia@gmail.com
+password: ia12345
+
+
+1.
+
+Agregar páginas
+
+2.
+
+Agregar matching preliminar sin IA
+
+3.
+
+Chunking
+
+4.
+
+Scores de confianza
+
+5.
+
+Embeddings

@@ -1,0 +1,26 @@
+# Backend
+venv/
+.env
+__pycache__/
+*.pyc
+chroma_data/
+chroma_db_local/
+
+# Frontend
+node_modules/
+dist/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+frontend/
+backend/venv/
+backend/chroma_data/
+backend/chroma_db_local/
+backend/.env
+*.pdf
