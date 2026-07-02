@@ -66,7 +66,7 @@ export async function retrieveRelevantChunks(sessionId: string, query: string, d
     .orderBy(sql`${documentChunks.embedding} <=> ${queryEmbeddingString}::vector`)
     .limit(limit);
 
-    return results.map(r => r.chunk_text);
+    return results.map(r => r.chunk_text).filter((t): t is string => t !== null);
 }
 
 export async function retrieveMultiQueryChunks(
@@ -104,6 +104,7 @@ export async function retrieveMultiQueryChunks(
         .limit(limitPerQuery);
 
         for (const r of results) {
+            if (!r.chunk_text) continue;
             if (!allChunks.has(r.chunk_text) || allChunks.get(r.chunk_text)! > r.distance) {
                 allChunks.set(r.chunk_text, r.distance);
             }

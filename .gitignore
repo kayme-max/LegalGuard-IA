@@ -5,3 +5,13 @@ dist-ssr/
 .env
 .env.*
 !.env.example
+# Logs
+*.log
+npm-debug.log*
+
+# Temporales
+tmp/
+temp/
+
+# Pruebas locales
+tests/
