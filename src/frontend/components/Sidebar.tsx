@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { View, User } from "../types";
 import {
-  LayoutDashboard,
   FileText,
   History,
   BookOpen,
@@ -33,11 +32,6 @@ export default function Sidebar({
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const menuItems = [
-    {
-      id: "dashboard" as View,
-      label: "Inicio / Dashboard",
-      icon: <LayoutDashboard className="w-5 h-5" />,
-    },
     {
       id: "identificar" as View,
       label: "Identificar Riesgos",

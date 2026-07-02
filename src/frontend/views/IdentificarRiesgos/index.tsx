@@ -239,6 +239,83 @@ export default function IdentificarRiesgos({ savedRiesgos, onNavigateToHistorial
     }
   };
 
+  const handlePruebas = async () => {
+    setIsAnalyzing(true);
+    try {
+      const mockId = new Date().getTime().toString();
+      const mockResponse = {
+        id_analisis: mockId,
+        archivo_licitacion: 'MockLicitacion.pdf',
+        normativas_cargadas: [],
+        proyecto: 'Proyecto de Prueba Mock',
+        sector: 'Educación',
+        categoria: 'Todas',
+        origen_data: 'Motor Híbrido RAG (PRUEBA)',
+        status: 'success',
+        mensaje: 'Auditoría completada (Modo Prueba). Se detectaron 2 riesgos.',
+        resultado: {
+          resumen_ejecutivo: 'Este es un análisis de prueba generado por el botón PRUEBAS. Se omitió el procesamiento real de RAG para facilitar las pruebas de interfaz.',
+          riesgos_detectados: [
+            {
+              riesgo_id: 'R-001',
+              tipo_contrato: 'Obras',
+              sector: 'Educación',
+              categoria: 'Legal',
+              subcategoria: 'Penalidades',
+              riesgo_identificado: 'Penalidad excesiva por retraso menor',
+              foco_revision: 'Cláusula de penalidades',
+              estado: 'ACTIVADO',
+              fragmento_licitacion_evidencia: 'Cláusula 14.2 establece 5% diario.',
+              evidencia_seccion_normativa_riesgo: 'Art 162 del Reglamento Ley Contrataciones',
+              nivel_sustento_documental: 'Sustento claro y directo',
+            },
+            {
+              riesgo_id: 'NUEVO_DETECCION',
+              tipo_contrato: 'Obras',
+              sector: 'Educación',
+              categoria: 'Financiero',
+              subcategoria: 'Garantías',
+              riesgo_identificado: 'Falta de liberación de retenciones',
+              foco_revision: 'Cláusula de retenciones de garantía',
+              estado: 'NUEVO RIESGO DETECTADO',
+              fragmento_licitacion_evidencia: 'Las retenciones se liberan a los 2 años...',
+              evidencia_seccion_normativa_riesgo: 'No aplica',
+              nivel_sustento_documental: 'El plazo excede lo razonable según estándares.',
+            }
+          ]
+        }
+      };
+
+      const newSessionInfo = {
+        id: mockId,
+        fecha: new Date().toISOString(),
+        filename: 'Documento Prueba Mock.pdf',
+        formData: { nombreProyecto: 'Proyecto Mock', sector: ['Educación'], tipoContrato: 'Obras', categoria: [], subcategoria: [], promptContexto: '' },
+        paginasLicitacion: 10,
+        paginasNormativas: 0,
+        result: mockResponse as any,
+        isFullyLoaded: true
+      };
+      
+      onAnalysisComplete(newSessionInfo);
+      setIsAnalyzing(false);
+      
+      setFormData({ nombreProyecto: '', sector: [], tipoContrato: '', categoria: [], subcategoria: [], promptContexto: '' });
+      setMainDocuments([]);
+      setLicitacionPageCounts({});
+      setNormativasPageCounts({});
+      setNormativas([]);
+      setEnlaces([]);
+      
+      onNavigateToHistorial(mockId);
+      showToast("Análisis de prueba completado", "success");
+    } catch (error) {
+      console.error(error);
+      setIsAnalyzing(false);
+      showToast("Error en prueba", "error");
+    }
+  };
+
   return (
     <div className="w-full animate-fade-in">
       <div className="mb-8 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -264,6 +341,14 @@ export default function IdentificarRiesgos({ savedRiesgos, onNavigateToHistorial
             className="px-6 py-2.5 text-slate-700 font-medium bg-white hover:bg-slate-50 border border-slate-200 shadow-sm rounded-lg transition-colors"
           >
             Limpiar
+          </button>
+          <button 
+            type="button" 
+            onClick={handlePruebas}
+            disabled={isAnalyzing}
+            className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg shadow-md transition-all disabled:opacity-50"
+          >
+            PRUEBAS
           </button>
           <button 
             type="submit" 

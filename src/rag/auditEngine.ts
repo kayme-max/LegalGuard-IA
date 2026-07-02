@@ -1,3 +1,5 @@
+import { auditCoverage } from './coverage.js';
+import { deduplicateRisks } from './deduplicator.js';
 import { GoogleGenAI } from '@google/genai';
 import { retrieveMultiQueryChunks, retrieveRelevantChunks } from './vectorStore.js';
 import { groupRisksByDomain } from './domains.js';
@@ -182,37 +184,6 @@ Responde ÚNICAMENTE con un arreglo JSON (puede estar vacío):
     return callGemini(systemPrompt, userPrompt, 'gemini-3.5-flash');
 }
 
-async function auditCoverage(
-    systemPrompt: string,
-    allDiscoveredRisks: any[]
-): Promise<any[]> {
-    console.log(`[Phase 8] Coverage Audit`);
-    
-    const userPrompt = `
-AUDITORÍA DE COBERTURA (META-ANÁLISIS)
-
-Has detectado los siguientes riesgos hasta ahora:
-${JSON.stringify(allDiscoveredRisks.map(r => r.riesgo_identificado), null, 2)}
-
-INSTRUCCIONES:
-1. Analiza esta lista y determina si existen áreas evidentes de contratación (ej. seguridad, propiedad intelectual, resolución de disputas) que parezcan haber sido ignoradas.
-2. Si detectas vacíos temáticos, propone CÓMO reportarlos como riesgos de omisión. (Ej: "Ausencia de cláusulas sobre propiedad intelectual").
-
-Responde ÚNICAMENTE con un arreglo JSON (puede estar vacío):
-[
-  {
-    "riesgo_identificado": "Riesgo de Omisión: ...",
-    "foco_revision": "Documento completo",
-    "categoria": "Riesgo de Omisión Documental",
-    "subcategoria": "...",
-    "evidencia_licitacion": "[VACÍO CONTRACTUAL DETECTADO]",
-    "justificacion": "..."
-  }
-]`;
-
-    return callGemini(systemPrompt, userPrompt, 'gemini-3.5-flash');
-}
-
 export async function runFullLegalAudit(
     sessionId: string,
     kbRisks: any[],
@@ -344,17 +315,7 @@ export async function runFullLegalAudit(
     }
 
     // Phase 9: Validation and Deduplication
-    console.log(`[Phase 9] Deduplicating ${finalEvaluatedRisks.length} risks...`);
-    const uniqueRisksMap = new Map();
-    for (const risk of finalEvaluatedRisks) {
-        if (risk._dedupKey && !uniqueRisksMap.has(risk._dedupKey)) {
-            const key = risk._dedupKey;
-            delete risk._dedupKey; // Cleanup
-            uniqueRisksMap.set(key, risk);
-        }
-    }
-    
-    const finalRisks = Array.from(uniqueRisksMap.values());
+    const finalRisks = deduplicateRisks(finalEvaluatedRisks);
     const historicosCount = finalRisks.filter(r => r.riesgo_id !== 'NUEVO_DETECCION' && !r.riesgo_id?.startsWith('COMP_') && !r.riesgo_id?.startsWith('TRANS_')).length;
     const nuevosCount = finalRisks.length - historicosCount;
     
@@ -364,4 +325,108 @@ export async function runFullLegalAudit(
     console.log(`  - Total Riesgos Reportados: ${finalRisks.length}`);
 
     return finalRisks;
+}
+
+// --- ORCHESTRATOR ---
+import { extractTextFromPDF } from './pdfParser.js';
+import { chunkText } from './chunking.js';
+import { indexDocumentChunks, clearSessionChunks } from './vectorStore.js';
+import { db } from '../db/db.js';
+import { baseConocimiento, tiposContrato, tasks } from '../db/schema.js';
+import { eq, or, and, ilike } from 'drizzle-orm';
+import { RISK_ANALYSIS_SYSTEM_PROMPT } from '../prompts/analysisPrompt.js';
+import crypto from 'crypto';
+
+export async function orchestrateAudit(
+  taskId: string,
+  sessionId: string,
+  files: { [fieldname: string]: Express.Multer.File[] },
+  metadata: any
+) {
+  try {
+    const { sector, tipoContrato, categoria, subcategoria, promptContexto, nombreProyecto } = metadata;
+    const sectorArr = typeof sector === 'string' ? sector.split(',').map((s: string) => s.trim()) : (Array.isArray(sector) ? sector : []);
+    const categoriaArr = typeof categoria === 'string' ? categoria.split(',').map((c: string) => c.trim()) : (Array.isArray(categoria) ? categoria : []);
+    const subcategoriaArr = typeof subcategoria === 'string' ? subcategoria.split(',').map((s: string) => s.trim()) : (Array.isArray(subcategoria) ? subcategoria : []);
+    const proyectoStr = typeof nombreProyecto === 'string' ? nombreProyecto : '';
+
+    await db.update(tasks).set({ status: 'processing', updated_at: new Date() }).where(eq(tasks.id, taskId));
+
+    // Phase 1: Extract PDF and Chunk
+    console.log(`[API Task ${taskId}] Start processing mainDoc files...`);
+    for (const file of files['mainDoc'] || []) {
+      const text = await extractTextFromPDF(file.buffer);
+      const chunks = chunkText(text);
+      await indexDocumentChunks(sessionId, file.originalname, 'licitacion', chunks);
+    }
+
+    if (files['normativas']) {
+      for (const file of files['normativas']) {
+        const text = await extractTextFromPDF(file.buffer);
+        const chunks = chunkText(text);
+        await indexDocumentChunks(sessionId, file.originalname, 'normativa', chunks);
+      }
+    }
+
+    // Phase 2: Query Knowledge Base
+    let query = db.select().from(baseConocimiento);
+    const conditions = [];
+    if (tipoContrato && tipoContrato !== 'ALL') {
+      conditions.push(ilike(baseConocimiento.tipo_contrato, `%${tipoContrato}%`));
+    }
+    if (proyectoStr && proyectoStr.trim() !== '') {
+      conditions.push(ilike(baseConocimiento.nombre_archivo_licitacion, `%${proyectoStr}%`));
+    }
+    if (sectorArr.length > 0 && !sectorArr.includes('ALL')) {
+      conditions.push(or(...sectorArr.map((s: string) => ilike(baseConocimiento.sector, `%${s}%`))));
+    }
+    if (categoriaArr.length > 0 && !categoriaArr.includes('ALL')) {
+      conditions.push(or(...categoriaArr.map((c: string) => ilike(baseConocimiento.categoria, `%${c}%`))));
+    }
+    if (subcategoriaArr.length > 0 && !subcategoriaArr.includes('ALL')) {
+      conditions.push(or(...subcategoriaArr.map((s: string) => ilike(baseConocimiento.subcategoria, `%${s}%`))));
+    }
+
+    const kbRisks = conditions.length > 0 ? await query.where(and(...conditions)) : await query;
+
+    let dynamicSystemPrompt = RISK_ANALYSIS_SYSTEM_PROMPT;
+    if (tipoContrato) {
+      const customPromptResult = await db.select().from(tiposContrato).where(eq(tiposContrato.nombre, tipoContrato)).limit(1);
+      if (customPromptResult.length > 0 && customPromptResult[0].prompt_sistema) {
+        dynamicSystemPrompt = customPromptResult[0].prompt_sistema;
+      }
+    }
+
+    // Phase 3-9: Run Full Legal Audit
+    const finalEvaluatedRisks = await runFullLegalAudit(
+      sessionId,
+      kbRisks,
+      dynamicSystemPrompt,
+      promptContexto || '',
+      { tipoContrato, sectorArr }
+    );
+
+    const fullResponse = {
+      archivo_licitacion: files['mainDoc'].map(f => f.originalname).join(', '),
+      normativas_cargadas: files['normativas'] ? files['normativas'].map(f => f.originalname) : [],
+      proyecto: nombreProyecto || 'Proyecto de Licitación',
+      sector: sectorArr.join(', '),
+      categoria: categoriaArr.join(', '),
+      origen_data: 'Motor Híbrido RAG',
+      status: 'success',
+      mensaje: `Auditoría exhaustiva completada exitosamente. Se detectaron ${finalEvaluatedRisks.length} riesgos.`,
+      id_analisis: crypto.randomUUID(),
+      resultado: {
+        riesgos_detectados: finalEvaluatedRisks,
+        resumen_ejecutivo: `Se ha realizado una auditoría exhaustiva simulando un Comité de Abogados Senior. El análisis procesó ${kbRisks.length} riesgos de la base de conocimiento histórica y exploró proactivamente vacíos, omisiones y riesgos transversales. En total se reportan ${finalEvaluatedRisks.length} riesgos clasificados.`
+      }
+    };
+
+    await clearSessionChunks(sessionId);
+    await db.update(tasks).set({ status: 'completed', resultado: fullResponse, updated_at: new Date() }).where(eq(tasks.id, taskId));
+
+  } catch (error: any) {
+    console.error(`[API Task ${taskId}] Error:`, error);
+    await db.update(tasks).set({ status: 'error', error: error.message || 'Error desconocido durante el análisis.', updated_at: new Date() }).where(eq(tasks.id, taskId));
+  }
 }

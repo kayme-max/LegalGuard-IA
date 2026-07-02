@@ -1,4 +1,4 @@
-export type View = "dashboard" | "identificar" | "historial" | "conocimiento" | "administrar";
+export type View = "identificar" | "historial" | "conocimiento" | "administrar";
 
 export interface User {
   id: string;

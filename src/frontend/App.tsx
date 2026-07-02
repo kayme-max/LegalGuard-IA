@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Menu } from "lucide-react";
 import Sidebar from "./components/Sidebar";
 import Modal, { ModalType } from "./components/Modal";
-import Dashboard from "./views/Dashboard";
 import IdentificarRiesgos from "./views/IdentificarRiesgos";
 import HistorialRiesgos from "./views/HistorialRiesgos";
 import BaseConocimiento from "./views/BaseConocimiento";
@@ -224,13 +223,6 @@ export default function App() {
       </div>
 
       <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 min-w-0">
-        {currentView === "dashboard" && (
-          <Dashboard
-            history={analysisHistory}
-            savedRiesgos={savedRiesgos}
-            setCurrentView={setCurrentView}
-          />
-        )}
         {currentView === "identificar" && (
           <IdentificarRiesgos
             savedRiesgos={savedRiesgos}
