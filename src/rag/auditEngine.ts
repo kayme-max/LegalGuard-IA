@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { auditCoverage } from './coverage.js';
 import { deduplicateRisks } from './deduplicator.js';
 import { GoogleGenAI } from '@google/genai';
@@ -355,16 +356,40 @@ export async function orchestrateAudit(
     // Phase 1: Extract PDF and Chunk
     console.log(`[API Task ${taskId}] Start processing mainDoc files...`);
     for (const file of files['mainDoc'] || []) {
-      const text = await extractTextFromPDF(file.buffer);
-      const chunks = chunkText(text);
-      await indexDocumentChunks(sessionId, file.originalname, 'licitacion', chunks);
+      // Usamos path (diskStorage) si existe, o buffer si todavía está en memoryStorage
+      if (file.path) {
+        try {
+          await processPDFInBatches(file.path, 30, async (textBatch) => {
+            const chunks = chunkText(textBatch);
+            await indexDocumentChunks(sessionId, file.originalname, 'licitacion', chunks);
+          });
+        } finally {
+          // Limpiamos archivo temporal incluso si hay error
+          if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        }
+      } else {
+        const text = await extractTextFromPDF(file.buffer);
+        const chunks = chunkText(text);
+        await indexDocumentChunks(sessionId, file.originalname, 'licitacion', chunks);
+      }
     }
 
     if (files['normativas']) {
       for (const file of files['normativas']) {
-        const text = await extractTextFromPDF(file.buffer);
-        const chunks = chunkText(text);
-        await indexDocumentChunks(sessionId, file.originalname, 'normativa', chunks);
+        if (file.path) {
+          try {
+            await processPDFInBatches(file.path, 30, async (textBatch) => {
+              const chunks = chunkText(textBatch);
+              await indexDocumentChunks(sessionId, file.originalname, 'normativa', chunks);
+            });
+          } finally {
+            if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+          }
+        } else {
+          const text = await extractTextFromPDF(file.buffer);
+          const chunks = chunkText(text);
+          await indexDocumentChunks(sessionId, file.originalname, 'normativa', chunks);
+        }
       }
     }
 

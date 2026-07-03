@@ -342,6 +342,7 @@ export default function IdentificarRiesgos({ savedRiesgos, onNavigateToHistorial
           >
             Limpiar
           </button>
+          {import.meta.env.VITE_SHOW_TEST_BUTTON === 'true' && (
           <button 
             type="button" 
             onClick={handlePruebas}
@@ -350,6 +351,7 @@ export default function IdentificarRiesgos({ savedRiesgos, onNavigateToHistorial
           >
             PRUEBAS
           </button>
+          )}
           <button 
             type="submit" 
             form="analyze-form"

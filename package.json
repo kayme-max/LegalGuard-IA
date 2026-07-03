@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"tsx watch src/server/server.ts\" \"vite\"",
+    "dev": "concurrently \"tsx --max-old-space-size=8192 watch src/server/server.ts\" \"vite\"",
     "build": "tsc -p tsconfig.backend.json && vite build",
     "start": "NODE_ENV=production node dist/server/server.js",
     "lint": "eslint ."
