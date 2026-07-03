@@ -41,11 +41,16 @@ export function chunkText(text: string, chunkSize: number = 3000, overlapSize: n
       chunks.push(chunk);
     }
     
-    // Ensure progress and overlap
-    startIndex = endIndex - overlapSize;
-    if (startIndex <= 0 || endIndex - startIndex < 10) { 
-        startIndex = endIndex; 
+    if (endIndex >= text.length) {
+      break;
     }
+    
+    // Ensure progress and overlap
+    let nextStartIndex = endIndex - overlapSize;
+    if (nextStartIndex <= startIndex) {
+      nextStartIndex = endIndex;
+    }
+    startIndex = nextStartIndex;
   }
   
   return chunks;
