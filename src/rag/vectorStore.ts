@@ -1,8 +1,25 @@
 import { db } from '../db/db.js';
 import { documentChunks } from '../db/schema.js';
 import { generateEmbeddings } from './embeddings.js';
-import { sql } from 'drizzle-orm';
+import { sql, and, eq } from 'drizzle-orm';
 import crypto from 'crypto';
+
+function cosineSimilarity(vecA: number[], vecB: number[]) {
+    let dotProduct = 0.0;
+    let normA = 0.0;
+    let normB = 0.0;
+    for (let i = 0; i < vecA.length; i++) {
+        dotProduct += vecA[i] * vecB[i];
+        normA += vecA[i] * vecA[i];
+        normB += vecB[i] * vecB[i];
+    }
+    if (normA === 0 || normB === 0) return 0;
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+function cosineDistance(vecA: number[], vecB: number[]) {
+    return 1.0 - cosineSimilarity(vecA, vecB);
+}
 
 export async function indexDocumentChunks(sessionId: string, documentName: string, documentType: string, chunks: string[]) {
     console.log(`Indexing ${chunks.length} chunks for document: ${documentName} (${documentType})`);
@@ -48,25 +65,26 @@ export async function retrieveRelevantChunks(sessionId: string, query: string, d
         return [];
     }
 
-    // Using pgvector cosine distance `<=>`
-    // We want to order by cosine distance ascending (smaller is more similar)
-    const queryEmbeddingString = `[${queryEmbedding.join(',')}]`;
-    
-    let whereClause = sql`${documentChunks.session_id} = ${sessionId}`;
+    let whereClause: import("drizzle-orm").SQL | undefined = eq(documentChunks.session_id, sessionId);
     if (documentType) {
-        whereClause = sql`${whereClause} AND ${documentChunks.document_type} = ${documentType}`;
+        whereClause = and(whereClause, eq(documentChunks.document_type, documentType));
     }
     
-    const results = await db.select({
+    const allChunks = await db.select({
         chunk_text: documentChunks.chunk_text,
-        distance: sql<number>`${documentChunks.embedding} <=> ${queryEmbeddingString}::vector`
+        embedding: documentChunks.embedding
     })
     .from(documentChunks)
-    .where(whereClause)
-    .orderBy(sql`${documentChunks.embedding} <=> ${queryEmbeddingString}::vector`)
-    .limit(limit);
+    .where(whereClause);
 
-    return results.map(r => r.chunk_text).filter((t): t is string => t !== null);
+    const scoredChunks = allChunks.map(chunk => {
+        const dist = cosineDistance(chunk.embedding as number[], queryEmbedding);
+        return { text: chunk.chunk_text, distance: dist };
+    });
+
+    scoredChunks.sort((a, b) => a.distance - b.distance);
+    
+    return scoredChunks.slice(0, limit).map(c => c.text).filter((t): t is string => t !== null);
 }
 
 export async function retrieveMultiQueryChunks(
@@ -76,10 +94,24 @@ export async function retrieveMultiQueryChunks(
     limitPerQuery: number = 5,
     maxTotalLimit: number = 30
 ): Promise<string[]> {
-    const allChunks = new Map<string, number>(); // chunk_text -> distance
+    
+    let whereClause: import("drizzle-orm").SQL | undefined = eq(documentChunks.session_id, sessionId);
+    if (documentType) {
+        whereClause = and(whereClause, eq(documentChunks.document_type, documentType));
+    }
+    
+    const allDbChunks = await db.select({
+        chunk_text: documentChunks.chunk_text,
+        embedding: documentChunks.embedding
+    })
+    .from(documentChunks)
+    .where(whereClause);
+
+    if (allDbChunks.length === 0) return [];
+
+    const allChunksMap = new Map<string, number>(); // chunk_text -> distance
 
     for (const query of queries) {
-        // Generate embedding for the query
         const queryEmbeddingResult = await generateEmbeddings([query]);
         const queryEmbedding = queryEmbeddingResult[0];
         
@@ -87,32 +119,23 @@ export async function retrieveMultiQueryChunks(
             continue;
         }
 
-        const queryEmbeddingString = `[${queryEmbedding.join(',')}]`;
-        
-        let whereClause = sql`${documentChunks.session_id} = ${sessionId}`;
-        if (documentType) {
-            whereClause = sql`${whereClause} AND ${documentChunks.document_type} = ${documentType}`;
-        }
-        
-        const results = await db.select({
-            chunk_text: documentChunks.chunk_text,
-            distance: sql<number>`${documentChunks.embedding} <=> ${queryEmbeddingString}::vector`
-        })
-        .from(documentChunks)
-        .where(whereClause)
-        .orderBy(sql`${documentChunks.embedding} <=> ${queryEmbeddingString}::vector`)
-        .limit(limitPerQuery);
+        const scoredChunks = allDbChunks.map(chunk => {
+            const dist = cosineDistance(chunk.embedding as number[], queryEmbedding);
+            return { text: chunk.chunk_text, distance: dist };
+        });
 
-        for (const r of results) {
-            if (!r.chunk_text) continue;
-            if (!allChunks.has(r.chunk_text) || allChunks.get(r.chunk_text)! > r.distance) {
-                allChunks.set(r.chunk_text, r.distance);
+        scoredChunks.sort((a, b) => a.distance - b.distance);
+        const topForQuery = scoredChunks.slice(0, limitPerQuery);
+
+        for (const r of topForQuery) {
+            if (!r.text) continue;
+            if (!allChunksMap.has(r.text) || allChunksMap.get(r.text)! > r.distance) {
+                allChunksMap.set(r.text, r.distance);
             }
         }
     }
 
-    // Sort by best distance across all queries and limit
-    const sortedChunks = Array.from(allChunks.entries())
+    const sortedChunks = Array.from(allChunksMap.entries())
         .sort((a, b) => a[1] - b[1])
         .slice(0, maxTotalLimit)
         .map(entry => entry[0]);
@@ -121,5 +144,5 @@ export async function retrieveMultiQueryChunks(
 }
 
 export async function clearSessionChunks(sessionId: string) {
-    await db.delete(documentChunks).where(sql`${documentChunks.session_id} = ${sessionId}`);
+    await db.delete(documentChunks).where(eq(documentChunks.session_id, sessionId));
 }

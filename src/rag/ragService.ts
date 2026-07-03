@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 
 // Initialize the Google Gen AI SDK
 // Note: Ensure CUSTOM_GEMINI_API_KEY is set in your environment variables (.env)
-const ai = new GoogleGenAI({ apiKey: process.env.CUSTOM_GEMINI_API_KEY });
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY });
 
 export async function generateRagResponse(query: string, contextIds?: string[]) {
   try {

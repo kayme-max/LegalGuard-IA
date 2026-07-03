@@ -28,7 +28,7 @@ export const documentChunks = pgTable('document_chunks', {
   session_id: text('session_id'),
   document_name: text('document_name'),
   chunk_text: text('chunk_text'),
-  embedding: customType<{ data: number[]; driverData: string }>({ dataType() { return 'vector(768)'; } })('embedding'),
+  embedding: jsonb('embedding'),
   created_at: timestamp('created_at').defaultNow(),
   document_type: text('document_type'),
 });

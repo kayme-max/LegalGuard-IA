@@ -1,6 +1,5 @@
 -- Habilitar extensiones necesarias (ejecutar como superusuario si es necesario)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS vector;
 
 -- Tabla: base_conocimiento
 CREATE TABLE IF NOT EXISTS base_conocimiento (
@@ -32,7 +31,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     session_id TEXT,
     document_name TEXT,
     chunk_text TEXT,
-    embedding vector(768),
+    embedding JSONB,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     document_type TEXT
 );

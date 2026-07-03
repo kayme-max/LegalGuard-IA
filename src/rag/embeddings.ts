@@ -5,7 +5,7 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 const genAI = new GoogleGenAI({ 
-  apiKey: process.env.GEMINI_API_KEY || '',
+  apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
   httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
 });
 
