@@ -145,17 +145,55 @@ apiRouter.put('/historial_analisis/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const body = req.body;
+    
+    // Attempt to extract session fields (if they exist)
+    const nombre_base_proyecto = body.formData?.nombreProyecto || body.result?.proyecto || body.nombre_base_proyecto;
+    const tipo_contrato = body.formData?.tipoContrato || body.tipo_contrato;
+    const sector = body.formData?.sector ? (Array.isArray(body.formData.sector) ? body.formData.sector.join(", ") : body.formData.sector) : body.sector;
+    const resumen_ejecutivo = body.result?.resultado?.resumen_ejecutivo || body.resumen_ejecutivo;
+    
     await db.update(resultadoAnalisis).set({
-      nombre_base_proyecto: body.nombre_base_proyecto,
-      tipo_contrato: body.tipo_contrato,
-      sector: body.sector,
+      nombre_base_proyecto: nombre_base_proyecto,
+      tipo_contrato: tipo_contrato,
+      sector: sector,
       mensaje: body.mensaje,
-      resumen_ejecutivo: body.resumen_ejecutivo,
+      resumen_ejecutivo: resumen_ejecutivo,
       url_descarga_excel: body.url_descarga_excel,
       tiempo_identificacion_riesgo: body.tiempo_identificacion_riesgo,
       updated_at: new Date()
     }).where(eq(resultadoAnalisis.id_analisis, id));
-    res.json({ success: true });
+
+    // Also update the riesgos_detectados
+    const riesgos = body.result?.resultado?.riesgos_detectados || body.riesgos;
+    
+    if (riesgos && Array.isArray(riesgos)) {
+      // Delete existing risks
+      await db.delete(riesgosIdentificados).where(eq(riesgosIdentificados.id_analisis, id));
+      
+      const risksToInsert = riesgos.map((r: any) => ({
+        id_analisis: id,
+        riesgo_id: r.riesgo_id,
+        tipo_contrato: r.tipo_contrato,
+        sector: r.sector,
+        categoria: r.categoria,
+        subcategoria: r.subcategoria,
+        riesgo_identificado: r.riesgo_identificado,
+        foco_revision: r.foco_revision,
+        nombre_archivo_licitacion: r.nombre_archivo_licitacion,
+        seccion_evidencia_licitacion: r.seccion_evidencia_licitacion || r.evidencia_licitacion,
+        pagina_pdf_licitacion: r.pagina_pdf_licitacion ? String(r.pagina_pdf_licitacion) : null,
+        fragmento_licitacion_evidencia: r.fragmento_licitacion_evidencia,
+        nombre_archivo_normativa: r.nombre_archivo_normativa,
+        evidencia_seccion_normativa_riesgo: r.evidencia_seccion_normativa_riesgo || r.sustento_legal_normativo,
+        nivel_sustento_documental: r.nivel_sustento_documental
+      }));
+      
+      if (risksToInsert.length > 0) {
+        await db.insert(riesgosIdentificados).values(risksToInsert);
+      }
+    }
+
+    res.json({ success: true, updatedSession: body });
   } catch (error: any) {
     console.error('Error updating session:', error);
     res.status(500).json({ error: 'Failed to update session' });
@@ -187,6 +225,7 @@ apiRouter.post('/base_conocimiento_riesgos', async (req, res) => {
       riesgo_identificado: body.riesgo_identificado,
       foco_revision: body.foco_revision,
       criticidad: body.criticidad,
+      id_analisis: body.id_analisis,
     });
     res.json({ id });
   } catch (error: any) {
@@ -208,6 +247,7 @@ apiRouter.put('/base_conocimiento_riesgos/:id', async (req, res) => {
       riesgo_identificado: body.riesgo_identificado,
       foco_revision: body.foco_revision,
       criticidad: body.criticidad,
+      id_analisis: body.id_analisis,
       updated_at: new Date()
     }).where(eq(baseConocimiento.id, id));
     res.json({ id });

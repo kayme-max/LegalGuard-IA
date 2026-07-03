@@ -1,32 +1,29 @@
-import { AnalysisSession } from '@/types';
+import { Riesgo } from '@/types';
 
-export const handleDownloadExcel = async (selectedSession: AnalysisSession) => {
-  if (!selectedSession || !selectedSession.result?.resultado?.riesgos_detectados) return;
+export const handleDownloadBaseExcel = async (riesgos: Riesgo[]) => {
+  if (!riesgos || riesgos.length === 0) return;
   const ExcelJS = (await import("exceljs")).default;
   const { saveAs } = await import("file-saver");
   const workbook = new ExcelJS.Workbook();
-  const ws2 = workbook.addWorksheet("Detalle de Riesgos Identificados");
+  const ws = workbook.addWorksheet("Base de Conocimiento");
 
-  const projectName = selectedSession.formData?.nombreProyecto || selectedSession.result?.proyecto || "Proyecto";
-  
   const headers = [
-    "ID Riesgo",
+    "Número Riesgo",
     "Tipo Contrato",
     "Sector",
     "Categoría",
     "Subcategoría",
     "Riesgo Identificado",
     "Foco Revisión",
+    "Sustento Legal / Normativo",
     "Archivo Licitación",
-    "Evidencia Licitación",
+    "Sección Bases",
     "Página PDF",
-    "Fragmento Evidencia Licitación",
     "Archivo Normativa",
-    "Evidencia Sección Normativa Riesgo",
     "Nivel Sustento Documental"
   ];
-  
-  const headerRow = ws2.addRow(headers);
+
+  const headerRow = ws.addRow(headers);
   headerRow.height = 30;
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: "FFFFFF" }, size: 11 };
@@ -39,23 +36,21 @@ export const handleDownloadExcel = async (selectedSession: AnalysisSession) => {
       right: { style: "thin", color: { argb: "4F46E5" } },
     };
   });
-  
-  selectedSession.result.resultado.riesgos_detectados.forEach((r, i) => {
-    const sectorVal = Array.isArray(selectedSession.formData?.sector) ? selectedSession.formData.sector.join(", ") : selectedSession.formData?.sector;
-    const row = ws2.addRow([
-      r.riesgo_id || r.numero_riesgo || String(i + 1).padStart(3, "0"),
-      r.tipo_contrato || selectedSession.formData?.tipoContrato || "",
-      r.sector || sectorVal || "",
+
+  riesgos.forEach((r, i) => {
+    const row = ws.addRow([
+      r.numero_riesgo || r.riesgo_id || String(i + 1).padStart(3, "0"),
+      r.tipo_contrato || "",
+      r.sector || "",
       r.categoria || "",
       r.subcategoria || "",
       r.riesgo_identificado || "",
       r.foco_revision || "",
+      r.sustento_legal_normativo || "",
       r.nombre_archivo_licitacion || "",
-      r.seccion_evidencia_licitacion || r.evidencia_licitacion || "",
-      r.pagina_pdf_licitacion || r.pagina_pdf || "",
-      r.fragmento_licitacion_evidencia || r.fragmento_literal_fuente || "",
+      r.seccion_bases || "",
+      r.pagina_pdf || "",
       r.nombre_archivo_normativa || "",
-      r.evidencia_seccion_normativa_riesgo || r.sustento_legal_normativo || "",
       r.nivel_sustento_documental || ""
     ]);
     const isEven = i % 2 === 0;
@@ -73,14 +68,13 @@ export const handleDownloadExcel = async (selectedSession: AnalysisSession) => {
     });
   });
 
-  ws2.columns = [
+  ws.columns = [
     { width: 15 }, { width: 20 }, { width: 15 }, { width: 20 }, { width: 20 },
-    { width: 40 }, { width: 40 }, { width: 25 }, { width: 40 }, { width: 15 },
-    { width: 40 }, { width: 25 }, { width: 40 }, { width: 25 }
+    { width: 40 }, { width: 40 }, { width: 40 }, { width: 25 }, { width: 15 },
+    { width: 15 }, { width: 25 }, { width: 25 }
   ];
 
-  const safeName = projectName.replace(/[^a-z0-9]/gi, "_").toLowerCase();
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  saveAs(blob, `riesgos_${safeName}.xlsx`);
+  saveAs(blob, `base_conocimiento.xlsx`);
 };

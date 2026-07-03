@@ -10,7 +10,7 @@ import { View, Riesgo, AnalysisSession, User } from "./types";
 import { useToast } from "./components/ToastProvider";
 import { RiesgosService, AnalysisHistoryService } from "./lib/api";
 
-import logoUrl from "./assets/LEGALIA.png";
+import logoUrl from "./assets/LEGALIA-1.png";
 
 export default function App() {
   const { showToast } = useToast();
@@ -153,6 +153,41 @@ export default function App() {
         }
       },
     });
+  };
+
+    const handleBulkEntry = async (riesgos: Riesgo[]) => {
+    const newRiesgos = [...riesgos];
+    
+    // Generate IDs for those missing
+    let currentMax = savedRiesgos.reduce((max, r) => {
+      const parts = r.numero_riesgo.split("-");
+      const num = parts.length > 1 ? parseInt(parts[1], 10) : parseInt(parts[0], 10);
+      return !isNaN(num) && num > max ? num : max;
+    }, 0);
+
+    for (const riesgo of newRiesgos) {
+      if (!riesgo.numero_riesgo) {
+        const getPrefix = (r: Riesgo) => {
+          let text = r.tipo_contrato || "ART";
+          text = text.replace(/[^a-zA-Z]/g, "").toUpperCase();
+          return text.substring(0, 3) || "ART";
+        };
+        const prefix = getPrefix(riesgo);
+        currentMax++;
+        riesgo.numero_riesgo = `${prefix}-${String(currentMax).padStart(5, "0")}`;
+        riesgo.riesgo_id = `#${riesgo.numero_riesgo}`;
+      }
+    }
+
+    setSavedRiesgos((prev) => [...prev, ...newRiesgos]);
+    
+    try {
+      for (const riesgo of newRiesgos) {
+        await RiesgosService.create(riesgo);
+      }
+    } catch (e) {
+      console.warn("Failed to save some to backend, saved locally", e);
+    }
   };
 
   const handleManualEntry = async (riesgo: Riesgo) => {
@@ -299,6 +334,7 @@ export default function App() {
           <BaseConocimiento
             savedRiesgos={savedRiesgos}
             onManualEntry={handleManualEntry}
+            onBulkEntry={handleBulkEntry}
             onEditRiesgo={async (updatedRiesgo) => {
               setSavedRiesgos((prev) =>
                 prev.map((r) =>

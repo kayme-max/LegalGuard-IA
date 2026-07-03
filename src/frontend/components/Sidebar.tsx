@@ -10,7 +10,7 @@ import {
   LogOut,
   Settings
 } from "lucide-react";
-import logoUrl from "../assets/LEGALIA.png";
+import logoUrl from "../assets/LEGALIA-1.png";
 
 interface SidebarProps {
   currentView: View;
@@ -73,7 +73,7 @@ export default function Sidebar({
       <aside
         className={`fixed lg:static inset-y-0 left-0 bg-[#0D1B2A] text-slate-100 flex flex-col z-50 transition-all duration-300 transform lg:translate-x-0 shrink-0 border-r border-slate-800/50 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
-        } ${isCollapsed ? "lg:w-20 w-80" : "w-80"}`}
+        } ${isCollapsed ? "lg:w-20 w-64" : "w-64"}`}
       >
         {/* Header Branding */}
         <div

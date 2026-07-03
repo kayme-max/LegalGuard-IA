@@ -88,7 +88,7 @@ export default function AdministrarSistema() {
   );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="w-full space-y-8 animate-in fade-in duration-500">
       {/* Header section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -103,15 +103,19 @@ export default function AdministrarSistema() {
         
         <button
           onClick={() => {
-            setIsAdding(true);
-            setIsEditing(null);
-            setFormData({ tipo_contrato: '', prompt_interno: '' });
+            if (isAdding || isEditing) {
+              setIsAdding(false);
+              setIsEditing(null);
+            } else {
+              setIsAdding(true);
+              setIsEditing(null);
+              setFormData({ tipo_contrato: '', prompt_interno: '' });
+            }
           }}
-          disabled={isAdding}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-md shadow-indigo-100 transition-all disabled:opacity-50"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 text-indigo-600 hover:bg-indigo-50 font-semibold text-sm rounded-xl transition-colors cursor-pointer"
         >
-          <Plus className="w-5 h-5" />
-          Nuevo Tipo de Contrato
+          {isAdding || isEditing ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          {isAdding || isEditing ? 'Cancelar' : 'Nuevo Tipo de Contrato'}
         </button>
       </div>
 
@@ -173,83 +177,87 @@ export default function AdministrarSistema() {
       )}
 
       {/* List section */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <h2 className="text-xl font-bold text-slate-800">Prompts Configurados</h2>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar contrato..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-            />
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+          <div className="flex flex-col md:flex-row gap-3 items-center w-full md:w-auto flex-1">
+            <div className="relative w-full md:w-96">
+              <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar contrato..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              />
+            </div>
           </div>
         </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Tipo de Contrato</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Última Actualización</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={3} className="px-6 py-12 text-center text-slate-400">Cargando configuraciones...</td>
-                </tr>
-              ) : filteredPrompts.length === 0 ? (
-                <tr>
-                  <td colSpan={3} className="px-6 py-12 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <AlertCircle className="w-8 h-8 text-slate-300" />
-                      <p className="text-slate-500">No se encontraron prompts configurados</p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredPrompts.map((prompt) => (
-                  <tr key={prompt.id} className="hover:bg-indigo-50/30 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-xs">
-                          {prompt.tipo_contrato.substring(0, 2).toUpperCase()}
-                        </div>
-                        <span className="font-semibold text-slate-700">{prompt.tipo_contrato}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">
-                      {prompt.updated_at ? new Date(prompt.updated_at).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => startEdit(prompt)}
-                          className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all"
-                          title="Editar"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(prompt.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
+
+      {filteredPrompts.length === 0 && !isLoading ? (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center max-w-md mx-auto mb-6">
+          <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-slate-800">Sin resultados</h3>
+          <p className="text-sm text-slate-500 mt-2">
+            No encontramos ningún contrato que coincida con tu búsqueda.
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-fade-in relative z-0 mb-6">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-sm whitespace-nowrap min-w-max">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 text-xs uppercase tracking-wider">
+                <tr>
+                  <th className="p-4 sticky left-0 z-10 bg-slate-100">Tipo de Contrato</th>
+                  <th className="p-4">Última Actualización</th>
+                  <th className="p-4 text-right sticky right-0 z-10 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.05)] bg-slate-100">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={3} className="px-6 py-12 text-center text-slate-400">Cargando configuraciones...</td>
+                  </tr>
+                ) : (
+                  filteredPrompts.map((prompt, idx) => (
+                    <tr key={prompt.id} className={idx % 2 === 0 ? 'bg-white hover:bg-slate-50 transition-colors group' : 'bg-slate-50 hover:bg-slate-100 transition-colors group'}>
+                      <td className="p-4 font-bold sticky left-0 z-10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)]" style={{ backgroundColor: 'inherit' }}>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-xs">
+                            {prompt.tipo_contrato.substring(0, 2).toUpperCase()}
+                          </div>
+                          <span className="font-semibold text-slate-700">{prompt.tipo_contrato}</span>
+                        </div>
+                      </td>
+                      <td className="p-4 text-slate-600">
+                        {prompt.updated_at ? new Date(prompt.updated_at).toLocaleDateString() : 'N/A'}
+                      </td>
+                      <td className="p-4 text-right sticky right-0 z-10 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.05)]" style={{ backgroundColor: 'inherit' }}>
+                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => startEdit(prompt)}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all"
+                            title="Editar"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(prompt.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded-lg transition-all"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 flex gap-4">
         <AlertCircle className="w-6 h-6 text-amber-600 shrink-0" />

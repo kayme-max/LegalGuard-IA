@@ -10,6 +10,7 @@ export const baseConocimiento = pgTable('base_conocimiento', {
   riesgo_identificado: text('riesgo_identificado'),
   foco_revision: text('foco_revision'),
   criticidad: text('criticidad'),
+  id_analisis: text('id_analisis'),
   created_at: timestamp('created_at').defaultNow(),
   updated_at: timestamp('updated_at').defaultNow(),
   nombre_archivo_licitacion: text('nombre_archivo_licitacion'),

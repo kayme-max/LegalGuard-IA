@@ -1,12 +1,15 @@
 import { useState, useMemo } from 'react';
-import { Search, Plus, Trash2, Edit2, Check, X, ShieldAlert, BookOpen, AlertCircle, Filter, FilterX, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Plus, Trash2, Edit2, Check, X, ShieldAlert, BookOpen, AlertCircle, Filter, FilterX, ChevronDown, ChevronUp, Download, FileSpreadsheet } from 'lucide-react';
+import { handleDownloadBaseExcel } from './exportUtils';
 import { Riesgo } from '@/types';
 import { useToast } from '@/components/ToastProvider';
 import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
+import { ExcelUploader } from './components/ExcelUploader';
 
 interface BaseConocimientoProps {
   savedRiesgos: Riesgo[];
   onManualEntry: (riesgo: Riesgo) => void;
+  onBulkEntry?: (riesgos: Riesgo[]) => void;
   onEditRiesgo: (updatedRiesgo: Riesgo) => Promise<void>;
   onDeleteRiesgo: (numero_riesgo: string) => void;
 }
@@ -14,15 +17,17 @@ interface BaseConocimientoProps {
 export default function BaseConocimiento({
   savedRiesgos,
   onManualEntry,
+  onBulkEntry,
   onEditRiesgo,
   onDeleteRiesgo,
 }: BaseConocimientoProps) {
   const { showToast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTipoContrato, setSelectedTipoContrato] = useState<string[]>([]);
-  const [selectedSector, setSelectedSector] = useState<string[]>([]);
-  const [selectedCategoria, setSelectedCategoria] = useState<string[]>([]);
-  const [selectedSubcategoria, setSelectedSubcategoria] = useState<string[]>([]);
+  const [selectedTipoContrato, setSelectedTipoContrato] = useState("ALL");
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedSector, setSelectedSector] = useState("ALL");
+  const [selectedCategoria, setSelectedCategoria] = useState("ALL");
+  const [selectedSubcategoria, setSelectedSubcategoria] = useState("ALL");
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
@@ -63,49 +68,24 @@ export default function BaseConocimiento({
     return filter.some(f => values.includes(f.toUpperCase()));
   };
 
-  // Filter options lists (Correlative)
-  const tiposContratoOptions = useMemo(() => {
-    let filtered = savedRiesgos;
-    if (selectedSector.length > 0) filtered = filtered.filter(r => matchesFilter(r.sector, selectedSector));
-    if (selectedCategoria.length > 0) filtered = filtered.filter(r => selectedCategoria.includes(r.categoria));
-    if (selectedSubcategoria.length > 0) filtered = filtered.filter(r => selectedSubcategoria.includes(r.subcategoria));
-    const types = Array.from(new Set(filtered.map(r => r.tipo_contrato))).filter(Boolean);
-    return types.map(t => ({ label: t, value: t }));
-  }, [savedRiesgos, selectedSector, selectedCategoria, selectedSubcategoria]);
+  
+  const filterArrays = {
+    sectores: Array.from(new Set(savedRiesgos.flatMap(r => r.sector ? r.sector.split(', ').map(s=>s.trim()) : []))).filter(Boolean).sort(),
+    tiposContrato: Array.from(new Set(savedRiesgos.map(r => r.tipo_contrato))).filter(Boolean).sort(),
+    categorias: Array.from(new Set(savedRiesgos.map(r => r.categoria))).filter(Boolean).sort(),
+    subcategorias: Array.from(new Set(savedRiesgos.map(r => r.subcategoria))).filter(Boolean).sort(),
+  };
 
-  const sectoresOptions = useMemo(() => {
-    let filtered = savedRiesgos;
-    if (selectedTipoContrato.length > 0) filtered = filtered.filter(r => selectedTipoContrato.includes(r.tipo_contrato));
-    if (selectedCategoria.length > 0) filtered = filtered.filter(r => selectedCategoria.includes(r.categoria));
-    if (selectedSubcategoria.length > 0) filtered = filtered.filter(r => selectedSubcategoria.includes(r.subcategoria));
-    const sectors = Array.from(new Set(filtered.flatMap(r => r.sector ? r.sector.split(', ') : []))).filter(Boolean);
-    return sectors.map(s => ({ label: s, value: s }));
-  }, [savedRiesgos, selectedTipoContrato, selectedCategoria, selectedSubcategoria]);
+  // For the 'Agregar Nuevo' form we need {label, value} format:
+  const sectoresOptions = filterArrays.sectores.map(s => ({label: s, value: s}));
 
-  const categoriasOptions = useMemo(() => {
-    let filtered = savedRiesgos;
-    if (selectedTipoContrato.length > 0) filtered = filtered.filter(r => selectedTipoContrato.includes(r.tipo_contrato));
-    if (selectedSector.length > 0) filtered = filtered.filter(r => matchesFilter(r.sector, selectedSector));
-    if (selectedSubcategoria.length > 0) filtered = filtered.filter(r => selectedSubcategoria.includes(r.subcategoria));
-    const cats = Array.from(new Set(filtered.map(r => r.categoria))).filter(Boolean);
-    return cats.map(c => ({ label: c, value: c }));
-  }, [savedRiesgos, selectedTipoContrato, selectedSector, selectedSubcategoria]);
-
-  const subcategoriasOptions = useMemo(() => {
-    let filtered = savedRiesgos;
-    if (selectedTipoContrato.length > 0) filtered = filtered.filter(r => selectedTipoContrato.includes(r.tipo_contrato));
-    if (selectedSector.length > 0) filtered = filtered.filter(r => matchesFilter(r.sector, selectedSector));
-    if (selectedCategoria.length > 0) filtered = filtered.filter(r => selectedCategoria.includes(r.categoria));
-    const subs = Array.from(new Set(filtered.map(r => r.subcategoria))).filter(Boolean);
-    return subs.map(s => ({ label: s, value: s }));
-  }, [savedRiesgos, selectedTipoContrato, selectedSector, selectedCategoria]);
 
   const clearFilters = () => {
     setSearchTerm('');
-    setSelectedTipoContrato([]);
-    setSelectedSector([]);
-    setSelectedCategoria([]);
-    setSelectedSubcategoria([]);
+    setSelectedTipoContrato('ALL');
+    setSelectedSector('ALL');
+    setSelectedCategoria('ALL');
+    setSelectedSubcategoria('ALL');
   };
 
   // Handle addition
@@ -204,18 +184,22 @@ export default function BaseConocimiento({
         riesgoIdentificado.toLowerCase().includes(searchTerm.toLowerCase()) ||
         numeroRiesgo.toLowerCase().includes(searchTerm.toLowerCase()) ||
         sustento.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesSector = matchesFilter(r.sector, selectedSector);
-      const matchesTipoContrato = selectedTipoContrato.length === 0 || selectedTipoContrato.includes(r.tipo_contrato);
-      const matchesCategoria = selectedCategoria.length === 0 || selectedCategoria.includes(r.categoria);
-      const matchesSubcategoria = selectedSubcategoria.length === 0 || selectedSubcategoria.includes(r.subcategoria);
+        
+      const rSectors = r.sector ? r.sector.split(', ').map(s=>s.trim().toUpperCase()) : [];
+      const matchesSector = selectedSector === "ALL" || rSectors.includes(selectedSector.toUpperCase());
+      const matchesTipoContrato = selectedTipoContrato === "ALL" || (r.tipo_contrato || "").toUpperCase() === selectedTipoContrato.toUpperCase();
+      const matchesCategoria = selectedCategoria === "ALL" || (r.categoria || "").toUpperCase() === selectedCategoria.toUpperCase();
+      const matchesSubcategoria = selectedSubcategoria === "ALL" || (r.subcategoria || "").toUpperCase() === selectedSubcategoria.toUpperCase();
 
       return matchesSearch && matchesSector && matchesTipoContrato && matchesCategoria && matchesSubcategoria;
     });
   }, [savedRiesgos, searchTerm, selectedSector, selectedTipoContrato, selectedCategoria, selectedSubcategoria]);
 
+  const activeFiltersCount = (selectedTipoContrato !== "ALL" ? 1 : 0) + (selectedSector !== "ALL" ? 1 : 0) + (selectedCategoria !== "ALL" ? 1 : 0) + (selectedSubcategoria !== "ALL" ? 1 : 0);
+
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="w-full space-y-6 animate-fade-in">
       {/* Title section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -229,281 +213,154 @@ export default function BaseConocimiento({
         </div>
         <button
           onClick={() => setIsAddingNew(!isAddingNew)}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-xl shadow-sm transition-colors cursor-pointer"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 text-indigo-600 hover:bg-indigo-50 font-semibold text-sm rounded-xl transition-colors cursor-pointer"
         >
           {isAddingNew ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {isAddingNew ? 'Cancelar Registro' : 'Registrar Riesgo'}
+          {isAddingNew ? 'Cancelar' : 'Importar Excel'}
         </button>
       </div>
 
       {/* Manual creation form */}
       {isAddingNew && (
-        <form onSubmit={handleAddNewSubmit} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 space-y-5 animate-fade-in">
-          <h2 className="text-lg font-bold text-slate-900">Agregar Nuevo Riesgo Manual</h2>
-          
-          <datalist id="list-sectores">
-            {sectoresOptions.map(opt => <option key={opt.value} value={opt.value} />)}
-          </datalist>
-          <datalist id="list-tipos">
-            {tiposContratoOptions.map(opt => <option key={opt.value} value={opt.value} />)}
-          </datalist>
-          <datalist id="list-categorias">
-            {categoriasOptions.map(opt => <option key={opt.value} value={opt.value} />)}
-          </datalist>
-          <datalist id="list-subcategorias">
-            {subcategoriasOptions.map(opt => <option key={opt.value} value={opt.value} />)}
-          </datalist>
-          <datalist id="list-focos">
-            {Array.from(new Set(savedRiesgos.map(r => r.foco_revision))).filter(Boolean).map(f => <option key={f} value={f} />)}
-          </datalist>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Tipo de Contrato *</label>
-              <input
-                list="list-tipos"
-                type="text"
-                value={newRiesgo.tipo_contrato}
-                onChange={e => setNewRiesgo({ ...newRiesgo, tipo_contrato: e.target.value })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                placeholder="Ej. CONSTRUCCION"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Sector *</label>
-              <MultiSelectDropdown 
-                options={sectoresOptions}
-                selected={Array.isArray(newRiesgo.sector) ? newRiesgo.sector : []}
-                onChange={(selected) => setNewRiesgo({ ...newRiesgo, sector: selected })}
-                placeholder="Seleccione sector(es)"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Categoría *</label>
-              <input
-                list="list-categorias"
-                type="text"
-                value={newRiesgo.categoria}
-                onChange={e => setNewRiesgo({ ...newRiesgo, categoria: e.target.value.toUpperCase() })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                placeholder="Ej. LEGAL"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Subcategoría *</label>
-              <input
-                list="list-subcategorias"
-                type="text"
-                value={newRiesgo.subcategoria}
-                onChange={e => setNewRiesgo({ ...newRiesgo, subcategoria: e.target.value.toUpperCase() })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                placeholder="Ej. CONTROVERSIAS"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Foco de Revisión *</label>
-              <input
-                list="list-focos"
-                type="text"
-                value={newRiesgo.foco_revision}
-                onChange={e => setNewRiesgo({ ...newRiesgo, foco_revision: e.target.value.toUpperCase() })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                placeholder="Ej. TECNICO"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Archivo de Licitación</label>
-              <input
-                type="text"
-                value={newRiesgo.nombre_archivo_licitacion || ''}
-                onChange={e => setNewRiesgo({ ...newRiesgo, nombre_archivo_licitacion: e.target.value })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                placeholder="Nombre del archivo de licitación..."
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Sección Bases</label>
-              <input
-                type="text"
-                value={newRiesgo.seccion_bases || ''}
-                onChange={e => setNewRiesgo({ ...newRiesgo, seccion_bases: e.target.value })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                placeholder="Ej. Numeral 3.1..."
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Página PDF</label>
-              <input
-                type="number"
-                value={newRiesgo.pagina_pdf || ''}
-                onChange={e => setNewRiesgo({ ...newRiesgo, pagina_pdf: e.target.value ? parseInt(e.target.value, 10) : undefined })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                placeholder="Número de página"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Archivo Normativa</label>
-              <input
-                type="text"
-                value={newRiesgo.nombre_archivo_normativa || ''}
-                onChange={e => setNewRiesgo({ ...newRiesgo, nombre_archivo_normativa: e.target.value })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                placeholder="Nombre de archivo de normativa..."
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Descripción del Riesgo Identificado *</label>
-            <textarea
-              rows={3}
-              value={newRiesgo.riesgo_identificado}
-              onChange={e => setNewRiesgo({ ...newRiesgo, riesgo_identificado: e.target.value })}
-              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              placeholder="Describa el hallazgo o contingencia legal/técnica..."
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Sustento Legal / Normativa (Opcional)</label>
-            <textarea
-              rows={3}
-              value={newRiesgo.sustento_legal_normativo || ''}
-              onChange={e => setNewRiesgo({ ...newRiesgo, sustento_legal_normativo: e.target.value })}
-              className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              placeholder="Leyes, reglamentos o bases que sustentan este riesgo..."
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Contexto del Párrafo</label>
-              <textarea
-                rows={3}
-                value={newRiesgo.contexto_parrafo || ''}
-                onChange={e => setNewRiesgo({ ...newRiesgo, contexto_parrafo: e.target.value })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Evidencia en Licitación</label>
-              <textarea
-                rows={3}
-                value={newRiesgo.evidencia_licitacion || ''}
-                onChange={e => setNewRiesgo({ ...newRiesgo, evidencia_licitacion: e.target.value })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Fragmento Literal de Fuente</label>
-              <textarea
-                rows={3}
-                value={newRiesgo.fragmento_literal_fuente || ''}
-                onChange={e => setNewRiesgo({ ...newRiesgo, fragmento_literal_fuente: e.target.value })}
-                className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors cursor-pointer"
-            >
-              Guardar en Biblioteca
-            </button>
-          </div>
-        </form>
+        <ExcelUploader 
+          onImport={(riesgos) => {
+            if (onBulkEntry) onBulkEntry(riesgos);
+            setIsAddingNew(false);
+          }} 
+          onCancel={() => setIsAddingNew(false)} 
+        />
       )}
 
       {/* Filter and Search Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col gap-4">
-        {/* Top row: Search and clear filters */}
-        <div className="flex flex-col md:flex-row gap-4 items-center w-full">
-          {/* Search */}
-          <div className="relative w-full md:flex-1">
-            <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar por código, descripción o sustento legal..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 placeholder-slate-400 transition-all focus:bg-white"
-            />
+      
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col gap-4">
+        {/* Top row: Search and filter toggle */}
+        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+          <div className="flex flex-col md:flex-row gap-3 items-center w-full md:w-auto flex-1">
+            <div className="relative w-full md:w-96">
+              <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar por código, descripción o sustento legal..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all border ${activeFiltersCount > 0 || showFilters ? "bg-indigo-100 text-indigo-700 border-transparent" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+            >
+              <Filter className="w-4 h-4" />
+              Filtros {activeFiltersCount > 0 && `(${activeFiltersCount})`}
+            </button>
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors shrink-0"
+                title="Limpiar filtros"
+              >
+                <FilterX className="w-4 h-4" />
+              </button>
+            )}
           </div>
-          
-          {/* Clear Filters Button */}
           <button
-            onClick={clearFilters}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors shrink-0"
-            title="Limpiar filtros"
+            onClick={() => handleDownloadBaseExcel(filteredRiesgos)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-colors shadow-sm cursor-pointer w-full md:w-auto"
           >
-            <FilterX className="w-4 h-4" />
-            <span className="hidden md:inline">Limpiar</span>
+            <FileSpreadsheet className="w-4 h-4" />
+            DESCARGAR EXCEL
           </button>
         </div>
 
-        {/* Bottom row: Filter Dropdowns */}
-        <div className="flex flex-wrap items-center gap-3 w-full">
-          <Filter className="w-4 h-4 text-slate-400 hidden sm:block" />
-          
-          {/* Tipo Contrato Filter */}
-          <div className="w-full sm:w-auto flex-1 min-w-[180px]">
-            <MultiSelectDropdown 
-              options={tiposContratoOptions}
-              selected={selectedTipoContrato}
-              onChange={(selected) => setSelectedTipoContrato(selected)}
-              placeholder="Contratos (Todos)"
-            />
-          </div>
+        {/* Filters */}
+        {showFilters && (
+          <div className="flex flex-wrap items-center gap-3 animate-in slide-in-from-top-2 duration-200">
+            <div className={`relative flex items-center px-3 py-1.5 rounded-full transition-colors border ${selectedTipoContrato !== "ALL" ? "bg-indigo-100 text-indigo-700 border-transparent" : "bg-transparent border-transparent hover:bg-slate-100 text-slate-600"}`}>
+              <select
+                value={selectedTipoContrato}
+                onChange={(e) => setSelectedTipoContrato(e.target.value)}
+                className="appearance-none bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-sm font-medium cursor-pointer pr-6"
+              >
+                <option value="ALL">Tipos de Contrato</option>
+                {filterArrays.tiposContrato.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+              {selectedTipoContrato !== "ALL" ? (
+                <button onClick={() => setSelectedTipoContrato("ALL")} className="absolute right-2 p-0.5 rounded-full hover:bg-indigo-200 text-indigo-500 hover:text-indigo-700 z-10" title="Quitar filtro">
+                  <X className="w-3 h-3" />
+                </button>
+              ) : (
+                <ChevronDown className="absolute right-2 w-3 h-3 pointer-events-none opacity-50" />
+              )}
+            </div>
 
-          {/* Sector Filter */}
-          <div className="w-full sm:w-auto flex-1 min-w-[200px]">
-            <MultiSelectDropdown 
-              options={sectoresOptions}
-              selected={selectedSector}
-              onChange={(selected) => setSelectedSector(selected)}
-              placeholder="Sectores (Todos)"
-            />
-          </div>
+            <div className={`relative flex items-center px-3 py-1.5 rounded-full transition-colors border ${selectedSector !== "ALL" ? "bg-indigo-100 text-indigo-700 border-transparent" : "bg-transparent border-transparent hover:bg-slate-100 text-slate-600"}`}>
+              <select
+                value={selectedSector}
+                onChange={(e) => setSelectedSector(e.target.value)}
+                className="appearance-none bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-sm font-medium cursor-pointer pr-6"
+              >
+                <option value="ALL">Sectores</option>
+                {filterArrays.sectores.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              {selectedSector !== "ALL" ? (
+                <button onClick={() => setSelectedSector("ALL")} className="absolute right-2 p-0.5 rounded-full hover:bg-indigo-200 text-indigo-500 hover:text-indigo-700 z-10" title="Quitar filtro">
+                  <X className="w-3 h-3" />
+                </button>
+              ) : (
+                <ChevronDown className="absolute right-2 w-3 h-3 pointer-events-none opacity-50" />
+              )}
+            </div>
 
-          {/* Category Filter */}
-          <div className="w-full sm:w-auto flex-1 min-w-[180px]">
-            <MultiSelectDropdown 
-              options={categoriasOptions}
-              selected={selectedCategoria}
-              onChange={(selected) => setSelectedCategoria(selected)}
-              placeholder="Categorías (Todas)"
-            />
-          </div>
+            <div className={`relative flex items-center px-3 py-1.5 rounded-full transition-colors border ${selectedCategoria !== "ALL" ? "bg-indigo-100 text-indigo-700 border-transparent" : "bg-transparent border-transparent hover:bg-slate-100 text-slate-600"}`}>
+              <select
+                value={selectedCategoria}
+                onChange={(e) => setSelectedCategoria(e.target.value)}
+                className="appearance-none bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-sm font-medium cursor-pointer pr-6"
+              >
+                <option value="ALL">Categorías</option>
+                {filterArrays.categorias.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              {selectedCategoria !== "ALL" ? (
+                <button onClick={() => setSelectedCategoria("ALL")} className="absolute right-2 p-0.5 rounded-full hover:bg-indigo-200 text-indigo-500 hover:text-indigo-700 z-10" title="Quitar filtro">
+                  <X className="w-3 h-3" />
+                </button>
+              ) : (
+                <ChevronDown className="absolute right-2 w-3 h-3 pointer-events-none opacity-50" />
+              )}
+            </div>
 
-          {/* Subcategory Filter */}
-          <div className="w-full sm:w-auto flex-1 min-w-[180px]">
-            <MultiSelectDropdown 
-              options={subcategoriasOptions}
-              selected={selectedSubcategoria}
-              onChange={(selected) => setSelectedSubcategoria(selected)}
-              placeholder="Subcategorías (Todas)"
-            />
+            <div className={`relative flex items-center px-3 py-1.5 rounded-full transition-colors border ${selectedSubcategoria !== "ALL" ? "bg-indigo-100 text-indigo-700 border-transparent" : "bg-transparent border-transparent hover:bg-slate-100 text-slate-600"}`}>
+              <select
+                value={selectedSubcategoria}
+                onChange={(e) => setSelectedSubcategoria(e.target.value)}
+                className="appearance-none bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-sm font-medium cursor-pointer pr-6"
+              >
+                <option value="ALL">Subcategorías</option>
+                {filterArrays.subcategorias.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              {selectedSubcategoria !== "ALL" ? (
+                <button onClick={() => setSelectedSubcategoria("ALL")} className="absolute right-2 p-0.5 rounded-full hover:bg-indigo-200 text-indigo-500 hover:text-indigo-700 z-10" title="Quitar filtro">
+                  <X className="w-3 h-3" />
+                </button>
+              ) : (
+                <ChevronDown className="absolute right-2 w-3 h-3 pointer-events-none opacity-50" />
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* List results */}
+      {/* Table Results */}
       {filteredRiesgos.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center max-w-md mx-auto">
           <ShieldAlert className="w-12 h-12 text-slate-300 mx-auto mb-4" />
@@ -513,306 +370,133 @@ export default function BaseConocimiento({
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredRiesgos.map((riesgo) => {
-            const isEditing = editingId === riesgo.numero_riesgo;
-            return (
-              <div
-                key={riesgo.numero_riesgo}
-                className={`bg-white rounded-2xl border transition-all p-5 sm:p-6 ${
-                  isEditing ? 'border-indigo-500 ring-2 ring-indigo-500/15 shadow-md' : 'border-slate-200 hover:border-slate-300 shadow-sm'
-                }`}
-              >
-                {isEditing ? (
-                  /* EDITING MODE FORM */
-                  <div className="space-y-4 animate-fade-in">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-                      <span className="text-sm font-mono font-bold text-slate-500">{riesgo.numero_riesgo}</span>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleSaveEdit}
-                          className="p-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors cursor-pointer"
-                          title="Guardar Cambios"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={handleCancelEdit}
-                          className="p-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                          title="Cancelar"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Contrato</label>
-                        <input
-                          type="text"
-                          value={editForm.tipo_contrato || ''}
-                          onChange={e => setEditForm({ ...editForm, tipo_contrato: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Sector</label>
-                        <MultiSelectDropdown 
-                          options={sectoresOptions}
-                          selected={Array.isArray(editForm.sector) ? editForm.sector : []}
-                          onChange={(selected) => setEditForm({ ...editForm, sector: selected })}
-                          placeholder="Sectores"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Categoría</label>
-                        <input
-                          type="text"
-                          value={editForm.categoria || ''}
-                          onChange={e => setEditForm({ ...editForm, categoria: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Subcategoría</label>
-                        <input
-                          type="text"
-                          value={editForm.subcategoria || ''}
-                          onChange={e => setEditForm({ ...editForm, subcategoria: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Foco de Revisión</label>
-                        <input
-                          type="text"
-                          value={editForm.foco_revision || ''}
-                          onChange={e => setEditForm({ ...editForm, foco_revision: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Sección Bases</label>
-                        <input
-                          type="text"
-                          value={editForm.seccion_bases || ''}
-                          onChange={e => setEditForm({ ...editForm, seccion_bases: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Página PDF</label>
-                        <input
-                          type="number"
-                          value={editForm.pagina_pdf || ''}
-                          onChange={e => setEditForm({ ...editForm, pagina_pdf: e.target.value ? parseInt(e.target.value, 10) : undefined })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Archivo Licitación</label>
-                        <input
-                          type="text"
-                          value={editForm.nombre_archivo_licitacion || ''}
-                          onChange={e => setEditForm({ ...editForm, nombre_archivo_licitacion: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Archivo Normativa</label>
-                        <input
-                          type="text"
-                          value={editForm.nombre_archivo_normativa || ''}
-                          onChange={e => setEditForm({ ...editForm, nombre_archivo_normativa: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Riesgo Identificado</label>
-                      <textarea
-                        rows={2}
-                        value={editForm.riesgo_identificado || ''}
-                        onChange={e => setEditForm({ ...editForm, riesgo_identificado: e.target.value })}
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Sustento Legal / Normativa</label>
-                      <textarea
-                        rows={2}
-                        value={editForm.sustento_legal_normativo || ''}
-                        onChange={e => setEditForm({ ...editForm, sustento_legal_normativo: e.target.value })}
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                      />
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Contexto Párrafo</label>
-                        <textarea
-                          rows={2}
-                          value={editForm.contexto_parrafo || ''}
-                          onChange={e => setEditForm({ ...editForm, contexto_parrafo: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Evidencia Licitación</label>
-                        <textarea
-                          rows={2}
-                          value={editForm.evidencia_licitacion || ''}
-                          onChange={e => setEditForm({ ...editForm, evidencia_licitacion: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Fragmento Fuente</label>
-                        <textarea
-                          rows={2}
-                          value={editForm.fragmento_literal_fuente || ''}
-                          onChange={e => setEditForm({ ...editForm, fragmento_literal_fuente: e.target.value })}
-                          className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-sm"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* VIEW MODE */
-                  <div className="space-y-4">
-                    {/* Upper row: Tag metadata and actions */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 cursor-pointer" onClick={() => toggleRow(riesgo.numero_riesgo)}>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-mono font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden animate-fade-in relative z-0">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-sm whitespace-nowrap min-w-max">
+              <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 text-xs uppercase tracking-wider">
+                <tr>
+                  <th className="p-4 sticky left-0 z-10 bg-slate-100">Código</th>
+                  <th className="p-4">Tipo Contrato</th>
+                  <th className="p-4">Sector</th>
+                  <th className="p-4">Categoría</th>
+                  <th className="p-4">Subcategoría</th>
+                  <th className="p-4 min-w-[300px]">Riesgo Identificado</th>
+                  <th className="p-4 min-w-[200px]">Foco Revisión</th>
+                  <th className="p-4 min-w-[300px]">Sustento Legal y Contexto</th>
+                  <th className="p-4 text-center">Nivel Sustento</th>
+                  <th className="p-4 text-right sticky right-0 z-10 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.05)] bg-slate-100">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredRiesgos.map((riesgo, idx) => {
+                  const isEditing = editingId === riesgo.numero_riesgo;
+                  
+                                    if (isEditing) {
+                    return (
+                      <tr key={riesgo.numero_riesgo} className="bg-indigo-50/50">
+                        <td className="p-4 font-mono text-indigo-600 font-bold sticky left-0 z-10 bg-indigo-50" style={{ backgroundColor: '#eef2ff' }}>
                           {riesgo.numero_riesgo}
-                        </span>
-                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
-                          {riesgo.tipo_contrato}
-                        </span>
-                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
-                          {riesgo.sector}
-                        </span>
-                        <span className="text-xs font-bold text-indigo-500 bg-indigo-50 px-2.5 py-1 rounded-lg">
-                          {riesgo.categoria}
-                        </span>
-                        {riesgo.subcategoria && (
-                          <span className="text-xs font-semibold text-indigo-500/80 bg-indigo-50/50 px-2.5 py-1 rounded-lg border border-indigo-100">
-                            {riesgo.subcategoria}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Item Actions */}
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleStartEdit(riesgo); }}
-                          className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
-                          title="Editar Riesgo"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleDelete(riesgo.numero_riesgo); }}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Eliminar de Biblioteca"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                        >
-                          {expandedRows.has(riesgo.numero_riesgo) ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Main texts */}
-                    <div 
-                      className="flex flex-col gap-4 pt-1 cursor-pointer"
-                      onClick={() => toggleRow(riesgo.numero_riesgo)}
-                    >
-                      {/* Top: Risk Text */}
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Riesgo Identificado</h4>
-                        <p className="text-slate-800 font-semibold text-sm sm:text-base leading-relaxed whitespace-pre-line">
-                          {riesgo.riesgo_identificado}
-                        </p>
-                        {expandedRows.has(riesgo.numero_riesgo) && riesgo.alerta_sistema && (
-                          <div className="flex items-start gap-2 text-xs bg-slate-50 text-slate-600 p-3 rounded-xl border border-slate-100 mt-3">
-                            <AlertCircle className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
-                            <span><strong>Observación:</strong> {riesgo.alerta_sistema}</span>
+                        </td>
+                        <td className="p-4 align-top">
+                          <input type="text" value={editForm.tipo_contrato || ''} onChange={e => setEditForm({ ...editForm, tipo_contrato: e.target.value })} className="w-full min-w-[120px] px-2 py-1.5 border border-slate-300 bg-white rounded-lg text-sm focus:ring-1 focus:ring-indigo-500" />
+                        </td>
+                        <td className="p-4 align-top">
+                          <input type="text" value={Array.isArray(editForm.sector) ? editForm.sector.join(', ') : (editForm.sector || '')} onChange={e => setEditForm({ ...editForm, sector: e.target.value.split(',').map(s=>s.trim()) })} className="w-full min-w-[120px] px-2 py-1.5 border border-slate-300 bg-white rounded-lg text-sm focus:ring-1 focus:ring-indigo-500" placeholder="Sec1, Sec2" />
+                        </td>
+                        <td className="p-4 align-top">
+                          <input type="text" value={editForm.categoria || ''} onChange={e => setEditForm({ ...editForm, categoria: e.target.value })} className="w-full min-w-[120px] px-2 py-1.5 border border-slate-300 bg-white rounded-lg text-sm focus:ring-1 focus:ring-indigo-500" />
+                        </td>
+                        <td className="p-4 align-top">
+                          <input type="text" value={editForm.subcategoria || ''} onChange={e => setEditForm({ ...editForm, subcategoria: e.target.value })} className="w-full min-w-[120px] px-2 py-1.5 border border-slate-300 bg-white rounded-lg text-sm focus:ring-1 focus:ring-indigo-500" />
+                        </td>
+                        <td className="p-4 align-top">
+                          <textarea value={editForm.riesgo_identificado || ''} onChange={e => setEditForm({ ...editForm, riesgo_identificado: e.target.value })} className="w-full min-w-[300px] px-2 py-1.5 border border-slate-300 bg-white rounded-lg text-sm resize-none focus:ring-1 focus:ring-indigo-500 whitespace-normal" rows={4} />
+                        </td>
+                        <td className="p-4 align-top">
+                          <textarea value={editForm.foco_revision || ''} onChange={e => setEditForm({ ...editForm, foco_revision: e.target.value })} className="w-full min-w-[200px] px-2 py-1.5 border border-slate-300 bg-white rounded-lg text-sm resize-none focus:ring-1 focus:ring-indigo-500 whitespace-normal" rows={4} />
+                        </td>
+                        <td className="p-4 align-top">
+                          <textarea value={editForm.sustento_legal_normativo || ''} onChange={e => setEditForm({ ...editForm, sustento_legal_normativo: e.target.value })} className="w-full min-w-[300px] px-2 py-1.5 border border-slate-300 bg-white rounded-lg text-sm resize-none focus:ring-1 focus:ring-indigo-500 whitespace-normal" rows={4} />
+                        </td>
+                        <td className="p-4 align-top">
+                          <select value={editForm.nivel_sustento_documental || ''} onChange={e => setEditForm({ ...editForm, nivel_sustento_documental: e.target.value })} className="w-full px-2 py-1.5 border border-slate-300 bg-white rounded-lg text-sm focus:ring-1 focus:ring-indigo-500">
+                             <option value="">Seleccione</option>
+                             <option value="ALTO">ALTO</option>
+                             <option value="MEDIO">MEDIO</option>
+                             <option value="BAJO">BAJO</option>
+                          </select>
+                        </td>
+                        <td className="p-4 text-right sticky right-0 z-10 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.05)] bg-indigo-50" style={{ backgroundColor: '#eef2ff' }}>
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={handleSaveEdit} className="p-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg transition-colors cursor-pointer" title="Guardar Cambios">
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button onClick={handleCancelEdit} className="p-1.5 bg-slate-200 text-slate-700 hover:bg-slate-300 rounded-lg transition-colors cursor-pointer" title="Cancelar">
+                              <X className="w-4 h-4" />
+                            </button>
                           </div>
-                        )}
-                      </div>
+                        </td>
+                      </tr>
+                    );
+                  }
 
-                      {/* Bottom: Sustento text */}
-                      {expandedRows.has(riesgo.numero_riesgo) && (
-                        <div className="bg-slate-50/50 border border-slate-100 rounded-xl p-4 space-y-2 cursor-default" onClick={e => e.stopPropagation()}>
-                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Sustento Legal y Contexto</h4>
-                          {riesgo.sustento_legal_normativo ? (
-                            <p className="text-slate-600 text-xs sm:text-sm leading-relaxed whitespace-pre-line">
-                              {riesgo.sustento_legal_normativo}
-                            </p>
-                          ) : (
-                            <p className="text-slate-400 text-xs italic">
-                              No se ingresó sustento legal para este riesgo.
-                            </p>
-                          )}
-
-                          {/* File names and locations if available */}
-                          {(riesgo.nombre_archivo_licitacion || riesgo.nombre_archivo_normativa || riesgo.seccion_bases) && (
-                            <div className="text-[10px] text-slate-400 space-y-1 pt-2 border-t border-slate-100/60 mt-2">
-                              {riesgo.nombre_archivo_licitacion && (
-                                <p className="truncate"><strong>Licitación:</strong> {riesgo.nombre_archivo_licitacion} {riesgo.pagina_pdf ? `(Pág. ${riesgo.pagina_pdf})` : ''} {riesgo.seccion_bases ? `[${riesgo.seccion_bases}]` : ''}</p>
-                              )}
-                              {(!riesgo.nombre_archivo_licitacion && riesgo.seccion_bases) && (
-                                <p className="truncate"><strong>Sección Bases:</strong> {riesgo.seccion_bases} {riesgo.pagina_pdf ? `(Pág. ${riesgo.pagina_pdf})` : ''}</p>
-                              )}
-                              {riesgo.nombre_archivo_normativa && (
-                                <p className="truncate"><strong>Normativa:</strong> {riesgo.nombre_archivo_normativa}</p>
-                              )}
-                            </div>
-                          )}
-                          
-                          {(riesgo.contexto_parrafo || riesgo.evidencia_licitacion || riesgo.fragmento_literal_fuente) && (
-                            <div className="pt-2 border-t border-slate-100/60 mt-2 space-y-2">
-                              {riesgo.contexto_parrafo && (
-                                <div>
-                                  <strong className="text-[10px] uppercase text-slate-400">Contexto Párrafo:</strong>
-                                  <p className="text-xs text-slate-600 mt-0.5 whitespace-pre-line">{riesgo.contexto_parrafo}</p>
-                                </div>
-                              )}
-                              {riesgo.evidencia_licitacion && (
-                                <div>
-                                  <strong className="text-[10px] uppercase text-slate-400">Evidencia Licitación:</strong>
-                                  <p className="text-xs text-slate-600 mt-0.5 whitespace-pre-line">{riesgo.evidencia_licitacion}</p>
-                                </div>
-                              )}
-                              {riesgo.fragmento_literal_fuente && (
-                                <div>
-                                  <strong className="text-[10px] uppercase text-slate-400">Fragmento Fuente:</strong>
-                                  <p className="text-xs text-slate-600 mt-0.5 whitespace-pre-line">{riesgo.fragmento_literal_fuente}</p>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                  return (
+                    <tr key={riesgo.numero_riesgo} className={idx % 2 === 0 ? 'bg-white hover:bg-slate-50 transition-colors' : 'bg-slate-50 hover:bg-slate-100 transition-colors'}>
+                      <td className="p-4 font-mono text-indigo-600 font-bold sticky left-0 z-10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.05)]" style={{ backgroundColor: 'inherit' }}>
+                        {riesgo.numero_riesgo}
+                      </td>
+                      <td className="p-4"><span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold">{riesgo.tipo_contrato || "-"}</span></td>
+                      <td className="p-4"><span className="px-2 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-semibold">{riesgo.sector || "-"}</span></td>
+                      <td className="p-4"><span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-semibold">{riesgo.categoria || "-"}</span></td>
+                      <td className="p-4">{riesgo.subcategoria ? <span className="px-2 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-semibold">{riesgo.subcategoria}</span> : "-"}</td>
+                      <td className="p-4">
+                        <div className="font-semibold text-slate-800 whitespace-normal break-words max-w-sm">
+                          {riesgo.riesgo_identificado || "-"}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                      </td>
+                      <td className="p-4 whitespace-normal break-words max-w-[250px] text-slate-600 text-sm">
+                        {riesgo.foco_revision || "-"}
+                      </td>
+                      <td className="p-4 whitespace-normal break-words max-w-sm text-slate-600 text-sm">
+                        {riesgo.sustento_legal_normativo ? (
+                          <div className="line-clamp-3 hover:line-clamp-none transition-all">{riesgo.sustento_legal_normativo}</div>
+                        ) : (
+                          <span className="text-slate-400 italic">No se ingresó sustento</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          riesgo.nivel_sustento_documental?.toUpperCase() === "ALTO" ? "bg-emerald-100 text-emerald-700" :
+                          riesgo.nivel_sustento_documental?.toUpperCase() === "MEDIO" ? "bg-amber-100 text-amber-700" :
+                          "bg-slate-100 text-slate-700"
+                        }`}>
+                          {riesgo.nivel_sustento_documental || "N/A"}
+                        </span>
+                      </td>
+                      <td className="p-4 sticky right-0 z-10 shadow-[-4px_0_10px_-4px_rgba(0,0,0,0.05)]" style={{ backgroundColor: 'inherit' }}>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleStartEdit(riesgo); }}
+                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                            title="Editar Riesgo"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDelete(riesgo.numero_riesgo); }}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Eliminar de Biblioteca"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

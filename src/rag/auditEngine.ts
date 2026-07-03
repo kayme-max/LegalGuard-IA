@@ -369,7 +369,7 @@ export async function orchestrateAudit(
     }
 
     // Phase 2: Query Knowledge Base
-    let query = db.select().from(baseConocimiento);
+    const query = db.select().from(baseConocimiento);
     const conditions = [];
     if (tipoContrato && tipoContrato !== 'ALL') {
       conditions.push(ilike(baseConocimiento.tipo_contrato, `%${tipoContrato}%`));
