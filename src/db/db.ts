@@ -4,6 +4,9 @@ import * as schema from './schema.js';
 import dotenv from 'dotenv';
 import path from 'path';
 
+// Intentar cargar .env desde la raíz del proyecto (modo local)
+dotenv.config();
+// Intentar cargar desde el directorio superior (entorno AI Studio)
 dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
 
 const dbConfig = {
