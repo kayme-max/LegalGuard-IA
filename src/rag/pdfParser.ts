@@ -15,7 +15,7 @@ export async function processPDFInBatches(filePath: string, batchSize: number = 
     data, 
     useSystemFonts: true,
     disableFontFace: true,
-    isEvalSupported: false
+    
   });
   
   const doc = await loadingTask.promise;
@@ -43,7 +43,7 @@ export async function processPDFInBatches(filePath: string, batchSize: number = 
   }
   
   // Limpiar recursos principales del documento PDF
-  await doc.destroy();
+  await loadingTask.destroy();
 }
 
 // Mantenemos esta por si acaso, pero idealmente usamos la nueva de batches
@@ -60,7 +60,7 @@ export async function extractTextFromPDF(buffer: Buffer): Promise<string> {
     fullText += content.items.map((item: any) => item.str).join(' ') + '\n';
     page.cleanup();
   }
-  await doc.destroy();
+  await loadingTask.destroy();
   
   if (!fullText.trim()) {
     throw new Error("El documento PDF está vacío o no contiene texto extraíble.");

@@ -329,7 +329,7 @@ export async function runFullLegalAudit(
 }
 
 // --- ORCHESTRATOR ---
-import { extractTextFromPDF } from './pdfParser.js';
+import { extractTextFromPDF, processPDFInBatches } from './pdfParser.js';
 import { chunkText } from './chunking.js';
 import { indexDocumentChunks, clearSessionChunks } from './vectorStore.js';
 import { db } from '../db/db.js';
@@ -359,7 +359,7 @@ export async function orchestrateAudit(
       // Usamos path (diskStorage) si existe, o buffer si todavía está en memoryStorage
       if (file.path) {
         try {
-          await processPDFInBatches(file.path, 30, async (textBatch) => {
+          await processPDFInBatches(file.path, 30, async (textBatch: string) => {
             const chunks = chunkText(textBatch);
             await indexDocumentChunks(sessionId, file.originalname, 'licitacion', chunks);
           });
@@ -378,7 +378,7 @@ export async function orchestrateAudit(
       for (const file of files['normativas']) {
         if (file.path) {
           try {
-            await processPDFInBatches(file.path, 30, async (textBatch) => {
+            await processPDFInBatches(file.path, 30, async (textBatch: string) => {
               const chunks = chunkText(textBatch);
               await indexDocumentChunks(sessionId, file.originalname, 'normativa', chunks);
             });
