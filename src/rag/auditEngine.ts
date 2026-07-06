@@ -337,6 +337,8 @@ import { baseConocimiento, tiposContrato, tasks } from '../db/schema.js';
 import { eq, or, and, ilike } from 'drizzle-orm';
 import { RISK_ANALYSIS_SYSTEM_PROMPT } from '../prompts/analysisPrompt.js';
 import crypto from 'crypto';
+import { saveAnalysisResultTransaction } from '../db/services/persistenceService.js';
+
 
 export async function orchestrateAudit(
   taskId: string,
@@ -448,7 +450,20 @@ export async function orchestrateAudit(
     };
 
     await clearSessionChunks(sessionId);
-    await db.update(tasks).set({ status: 'completed', resultado: fullResponse, updated_at: new Date() }).where(eq(tasks.id, taskId));
+
+    // Save to DB and update task status atomically
+    const analysisData = {
+      nombre_base_proyecto: nombreProyecto || 'Proyecto de Licitación',
+      tipo_contrato: tipoContrato || '',
+      sector: sectorArr.join(', '),
+      mensaje: fullResponse.mensaje,
+      resumen_ejecutivo: fullResponse.resultado.resumen_ejecutivo,
+      url_descarga_excel: '',
+      tiempo_identificacion_riesgo: '',
+      riesgos: finalEvaluatedRisks
+    };
+    
+    await saveAnalysisResultTransaction(taskId, analysisData, fullResponse);
 
   } catch (error: any) {
     console.error(`[API Task ${taskId}] Error:`, error);

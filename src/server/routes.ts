@@ -1,6 +1,8 @@
 
 import { Router } from 'express';
 import { db } from '../db/db.js';
+import { saveAnalysisResultTransaction } from '../db/services/persistenceService.js';
+
 import { resultadoAnalisis, baseConocimiento, riesgosIdentificados, tiposContrato, tasks } from '../db/schema.js';
 import { eq, sql, and, or, inArray, ilike } from 'drizzle-orm';
 import crypto from 'crypto';
@@ -76,52 +78,13 @@ apiRouter.get('/historial/:id', async (req, res) => {
 
 apiRouter.post('/historial_analisis', async (req, res) => {
   try {
-    const { 
-      nombre_base_proyecto, 
-      tipo_contrato, 
-      sector, 
-      mensaje, 
-      resumen_ejecutivo, 
-      url_descarga_excel, 
-      tiempo_identificacion_riesgo,
-      riesgos // Array of risks to identify
-    } = req.body;
+    const analysisData = req.body;
     
-    const [analysis] = await db.insert(resultadoAnalisis).values({
-      nombre_base_proyecto,
-      tipo_contrato,
-      sector,
-      mensaje,
-      resumen_ejecutivo,
-      url_descarga_excel,
-      tiempo_identificacion_riesgo
-    }).returning({ id: resultadoAnalisis.id_analisis });
+    // We pass null for taskId because this endpoint only saves history, 
+    // it doesn't correspond to a background task execution.
+    const analysisId = await saveAnalysisResultTransaction(null, analysisData);
 
-    if (riesgos && Array.isArray(riesgos)) {
-      const risksToInsert = riesgos.map((r: any) => ({
-        id_analisis: analysis.id,
-        riesgo_id: r.riesgo_id,
-        tipo_contrato: r.tipo_contrato,
-        sector: r.sector,
-        categoria: r.categoria,
-        subcategoria: r.subcategoria,
-        riesgo_identificado: r.riesgo_identificado,
-        foco_revision: r.foco_revision,
-        nombre_archivo_licitacion: r.nombre_archivo_licitacion,
-        seccion_evidencia_licitacion: r.seccion_evidencia_licitacion,
-        pagina_pdf_licitacion: r.pagina_pdf_licitacion,
-        fragmento_licitacion_evidencia: r.fragmento_licitacion_evidencia,
-        nombre_archivo_normativa: r.nombre_archivo_normativa,
-        evidencia_seccion_normativa_riesgo: r.evidencia_seccion_normativa_riesgo,
-        nivel_sustento_documental: r.nivel_sustento_documental
-      }));
-
-      if (risksToInsert.length > 0) {
-        await db.insert(riesgosIdentificados).values(risksToInsert);
-      }
-    }
-
-    res.json({ id: analysis.id });
+    res.json({ id: analysisId });
   } catch (error: any) {
     console.error('Error creating session:', error);
     res.status(500).json({ error: 'Failed to create session' });
