@@ -216,6 +216,7 @@ export default function IdentificarRiesgos({ savedRiesgos, onNavigateToHistorial
         paginasLicitacion: totalMainPages,
         paginasNormativas: totalNormativasPages,
         result: response,
+        tiempo_identificacion_riesgo: response.tiempo_identificacion_riesgo,
         isFullyLoaded: true
       };
       

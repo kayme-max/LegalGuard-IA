@@ -87,4 +87,5 @@ export interface AnalysisSession {
   result: BackendResponse;
   isFullyLoaded?: boolean;
   total_riesgos?: number;
+  tiempo_identificacion_riesgo?: string;
 }

@@ -274,14 +274,8 @@ export default function App() {
             }}
             onAnalysisComplete={async (session) => {
               setAnalysisHistory((prev) => [session, ...prev]);
-              try {
-                await AnalysisHistoryService.create(session);
-              } catch (error) {
-                console.warn(
-                  "Failed to save history session to backend, saved locally.",
-                  error,
-                );
-              }
+              // La creación se realiza asíncronamente en el backend al terminar la tarea,
+              // por lo que no es necesario crear el registro desde el frontend.
             }}
           />
         )}
