@@ -347,6 +347,7 @@ export async function orchestrateAudit(
   metadata: any
 ) {
   try {
+    const startTime = Date.now();
     const { sector, tipoContrato, categoria, subcategoria, promptContexto, nombreProyecto } = metadata;
     const sectorArr = typeof sector === 'string' ? sector.split(',').map((s: string) => s.trim()) : (Array.isArray(sector) ? sector : []);
     const categoriaArr = typeof categoria === 'string' ? categoria.split(',').map((c: string) => c.trim()) : (Array.isArray(categoria) ? categoria : []);
@@ -433,6 +434,12 @@ export async function orchestrateAudit(
       { tipoContrato, sectorArr }
     );
 
+    const endTime = Date.now();
+    const durationMs = endTime - startTime;
+    const minutes = Math.floor(durationMs / 60000);
+    const seconds = Math.floor((durationMs % 60000) / 1000);
+    const tiempoStr = `${minutes}m ${seconds}s`;
+
     const fullResponse = {
       archivo_licitacion: files['mainDoc'].map(f => f.originalname).join(', '),
       normativas_cargadas: files['normativas'] ? files['normativas'].map(f => f.originalname) : [],
@@ -441,6 +448,7 @@ export async function orchestrateAudit(
       categoria: categoriaArr.join(', '),
       origen_data: 'Motor Híbrido RAG',
       status: 'success',
+      tiempo_identificacion_riesgo: tiempoStr,
       mensaje: `Auditoría exhaustiva completada exitosamente. Se detectaron ${finalEvaluatedRisks.length} riesgos.`,
       id_analisis: crypto.randomUUID(),
       resultado: {
@@ -449,9 +457,10 @@ export async function orchestrateAudit(
       }
     };
 
-    await clearSessionChunks(sessionId);
+    // await clearSessionChunks(sessionId); // Mantenemos los chunks en la base de datos para auditoría
 
     // Save to DB and update task status atomically
+        // Save to DB and update task status atomically
     const analysisData = {
       nombre_base_proyecto: nombreProyecto || 'Proyecto de Licitación',
       tipo_contrato: tipoContrato || '',
@@ -459,7 +468,7 @@ export async function orchestrateAudit(
       mensaje: fullResponse.mensaje,
       resumen_ejecutivo: fullResponse.resultado.resumen_ejecutivo,
       url_descarga_excel: '',
-      tiempo_identificacion_riesgo: '',
+      tiempo_identificacion_riesgo: tiempoStr,
       riesgos: finalEvaluatedRisks
     };
     

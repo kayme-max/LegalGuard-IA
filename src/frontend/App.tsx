@@ -179,14 +179,16 @@ export default function App() {
       }
     }
 
-    setSavedRiesgos((prev) => [...prev, ...newRiesgos]);
-    
     try {
+      const createdRiesgos = [];
       for (const riesgo of newRiesgos) {
-        await RiesgosService.create(riesgo);
+        const created = await RiesgosService.create(riesgo);
+        createdRiesgos.push({ ...riesgo, id: created.id });
       }
+      setSavedRiesgos((prev) => [...prev, ...createdRiesgos]);
     } catch (e) {
       console.warn("Failed to save some to backend, saved locally", e);
+      setSavedRiesgos((prev) => [...prev, ...newRiesgos]);
     }
   };
 
@@ -207,11 +209,12 @@ export default function App() {
       riesgo.numero_riesgo = `${prefix}-${String(maxNum + 1).padStart(5, "0")}`;
       riesgo.riesgo_id = `#${riesgo.numero_riesgo}`;
     }
-    setSavedRiesgos((prev) => [...prev, riesgo]);
     try {
-      await RiesgosService.create(riesgo);
+      const createdRiesgo = await RiesgosService.create(riesgo);
+      setSavedRiesgos((prev) => [...prev, { ...riesgo, id: createdRiesgo.id }]);
     } catch (e) {
       console.warn("Failed to save to backend, saved locally", e);
+      setSavedRiesgos((prev) => [...prev, riesgo]);
     }
   };
 

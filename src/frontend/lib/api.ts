@@ -302,7 +302,7 @@ export const RiesgosService = {
 
   async update(id: string | number, riesgo: Riesgo): Promise<Riesgo> {
     const response = await fetch(
-      `${API_BASE_URL}/base_conocimiento_riesgos/${id}`,
+      `${API_BASE_URL}/base_conocimiento_riesgos/${encodeURIComponent(id)}`,
       {
         method: "PUT",
         headers: {
@@ -321,7 +321,7 @@ export const RiesgosService = {
 
   async delete(id: string | number): Promise<void> {
     const response = await fetch(
-      `${API_BASE_URL}/base_conocimiento_riesgos/${id}`,
+      `${API_BASE_URL}/base_conocimiento_riesgos/${encodeURIComponent(id)}`,
       {
         method: "DELETE",
         headers: {

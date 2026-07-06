@@ -212,7 +212,12 @@ apiRouter.put('/base_conocimiento_riesgos/:id', async (req, res) => {
       criticidad: body.criticidad,
       id_analisis: body.id_analisis,
       updated_at: new Date()
-    }).where(eq(baseConocimiento.id, id));
+    }).where(
+      or(
+        eq(baseConocimiento.id, id),
+        eq(baseConocimiento.numero_riesgo, id)
+      )
+    );
     res.json({ id });
   } catch (error: any) {
     console.error('Error updating riesgo:', error);
@@ -223,7 +228,12 @@ apiRouter.put('/base_conocimiento_riesgos/:id', async (req, res) => {
 apiRouter.delete('/base_conocimiento_riesgos/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    await db.delete(baseConocimiento).where(eq(baseConocimiento.id, id));
+    await db.delete(baseConocimiento).where(
+      or(
+        eq(baseConocimiento.id, id),
+        eq(baseConocimiento.numero_riesgo, id)
+      )
+    );
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error deleting riesgo:', error);
